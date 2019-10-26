@@ -6,3 +6,8 @@
 #### Use provider
 #### Define remote state
 #### Create VPC
+## Part 2
+### Networking
+#### Create internet gateway
+#### Create subnets
+#### Create routing tables
