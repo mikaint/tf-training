@@ -1,13 +1,18 @@
 # Terraform training
 ## Part 1
 ### Initial setup
-#### AWS account preparation
-##### IAM user (credentials & policies)
-#### Use provider
-#### Define remote state
-#### Create VPC
+- AWS account preparation (credentials & policies, bucket etc)
+- Use provider
+- Define remote state
+- Create VPC
 ## Part 2
 ### Networking
-#### Create internet gateway
-#### Create subnets
-#### Create routing tables
+- Create Internet Gateway
+- Create Subnets
+- Create Routing Tables
+## Part 3
+### Load Balancer
+- Create Application Load Balancer
+- Create Target Group
+- Create Listener
+- Create Security Group
