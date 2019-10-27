@@ -142,3 +142,161 @@ resource "aws_security_group" "sg_load_balancer" {
     Name        = "lb-security-group"
   }
 }
+
+data "aws_ami" "server_ami" {
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+
+resource "aws_launch_configuration" "asg_conf" {
+  name_prefix = "asg-"
+
+  image_id             = "${data.aws_ami.server_ami.id}"
+  instance_type        = "t2.micro"
+  security_groups      = ["${aws_security_group.nodes_sg.id}"]
+  //key_name             = ""
+
+  user_data = "${local.user_data}"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+
+
+resource "aws_autoscaling_group" "auto_scaling_group" {
+  # Force a redeployment when launch configuration changes.
+  # This will reset the desired capacity if it was changed due to
+  # autoscaling events.
+  name = "${aws_launch_configuration.asg_conf.name}"
+
+  min_size             = 1
+  desired_capacity     = 1
+  max_size             = 3
+  health_check_type    = "ELB"
+  launch_configuration = "${aws_launch_configuration.asg_conf.name}"
+  vpc_zone_identifier  = "${aws_subnet.public_subnets.*.id}"
+  enabled_metrics      = ["GroupInServiceInstances"]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "${aws_launch_configuration.asg_conf.name}"
+    propagate_at_launch = true
+  }
+}
+
+locals {
+  user_data = <<EOF
+    #cloud-config
+    runcmd:
+    - yum install -y httpd && systemctl start httpd && systemctl enable httpd
+    - amazon-linux-extras install php7.2
+    - echo "<?php echo 'This is version 1<br>' .  @file_get_contents(\"http://instance-data/latest/meta-data/placement/availability-zone/\"); ?>" >  /var/www/html/index.php
+    - service httpd restart
+  EOF
+}
+
+resource "aws_autoscaling_attachment" "alb_autoscale" {
+  alb_target_group_arn   = "${aws_lb_target_group.lb_target_group.arn}"
+  autoscaling_group_name = "${aws_autoscaling_group.auto_scaling_group.id}"
+}
+
+
+resource "aws_security_group" "nodes_sg" {
+  description = "Security group for ec2 instances"
+  vpc_id      = "${aws_vpc.main.id}"
+  name        = "nodes-sg"
+
+  tags = {
+    Name        = "nodes-sg"
+  }
+}
+
+resource "aws_security_group_rule" "nodes-sg-inbound-http" {
+  type              = "ingress"
+  security_group_id = "${aws_security_group.nodes_sg.id}"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "TCP"
+
+  source_security_group_id = "${aws_security_group.sg_load_balancer.id}"
+}
+
+# resource "aws_security_group_rule" "nodes-sg-outbound" {
+#   type              = "egress"
+#   security_group_id = "${aws_security_group.nodes_sg.id}"
+#   from_port         = -1
+#   to_port           = 0
+#   protocol          = "-1"
+
+#   cidr_blocks = ["0.0.0.0/0"]
+# }
+
+resource "aws_autoscaling_policy" "asg_cpu_policy_scale_up" {
+  name                   = "asg-cpu-policy-scale-up"
+  scaling_adjustment     = 1
+  autoscaling_group_name = "${aws_autoscaling_group.auto_scaling_group.name}"
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  policy_type            = "SimpleScaling"
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_alarm_scale_up" {
+  alarm_name          = "cpu-alarm-scale-up"
+  alarm_description   = "CPU usage over 40%"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "120"
+  statistic           = "Average"
+  threshold           = "40"
+
+  dimensions = {
+    "AutoScalingGroupName" = "${aws_autoscaling_group.auto_scaling_group.name}"
+  }
+
+  actions_enabled = true
+  alarm_actions   = ["${aws_autoscaling_policy.asg_cpu_policy_scale_up.arn}"]
+}
+
+# scale down alarm
+resource "aws_autoscaling_policy" "asg_cpu_policy_scale_down" {
+  name                   = "asg-cpu-policy-scale-down"
+  scaling_adjustment     = "-1"
+  autoscaling_group_name = "${aws_autoscaling_group.auto_scaling_group.name}"
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  policy_type            = "SimpleScaling"
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_alarm_scale_down" {
+  alarm_name          = "cpu-alarm-scale-down"
+  alarm_description   = "CPU usage below 5%"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "120"
+  statistic           = "Average"
+  threshold           = "5"
+
+  dimensions = {
+    "AutoScalingGroupName" = "${aws_autoscaling_group.auto_scaling_group.name}"
+  }
+
+  actions_enabled = true
+  alarm_actions   = ["${aws_autoscaling_policy.asg_cpu_policy_scale_down.arn}"]
+}
