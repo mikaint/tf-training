@@ -76,7 +76,7 @@ resource "aws_route_table_association" "public-rt" {
 resource "aws_lb" "load_balancer" {
   name               = "test-load-balancer"
   security_groups    = ["${aws_security_group.sg_load_balancer.id}"]
-  subnets            = "${aws_subnet.public_subnets.*.id}"
+  subnets            = "${aws_subnet.private_subnets.*.id}"
   internal           = false
   load_balancer_type = "application"
   enable_deletion_protection = false
