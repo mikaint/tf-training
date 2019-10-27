@@ -21,5 +21,9 @@
 - Create Auto-scaling Group
 - Create Launch Configuration
 - Create Security Group
-- Create Key Pair
 - Create ASG policies and alarms
+## Part 5
+### 
+- Create Key Pair
+- Create Nat Gateways
+- Create Bastion Hosts
