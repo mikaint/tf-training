@@ -2,6 +2,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+module "keypair" {
+  source = "mitchellh/dynamic-keys/aws"
+  path   = "${path.root}/keys"
+  name   = "${var.key_name}"
+}
+
 terraform {
   backend "s3" {
     bucket = "mystate123"
@@ -76,7 +82,7 @@ resource "aws_route_table_association" "public-rt" {
 resource "aws_lb" "load_balancer" {
   name               = "test-load-balancer"
   security_groups    = ["${aws_security_group.sg_load_balancer.id}"]
-  subnets            = "${aws_subnet.private_subnets.*.id}"
+  subnets            = "${aws_subnet.public_subnets.*.id}"
   internal           = false
   load_balancer_type = "application"
   enable_deletion_protection = false
@@ -161,7 +167,7 @@ resource "aws_launch_configuration" "asg_conf" {
   image_id             = "${data.aws_ami.server_ami.id}"
   instance_type        = "t2.micro"
   security_groups      = ["${aws_security_group.nodes_sg.id}"]
-  //key_name             = ""
+  key_name             = "${var.key_name}"
 
   user_data = "${local.user_data}"
 
@@ -183,7 +189,7 @@ resource "aws_autoscaling_group" "auto_scaling_group" {
   max_size             = 3
   health_check_type    = "ELB"
   launch_configuration = "${aws_launch_configuration.asg_conf.name}"
-  vpc_zone_identifier  = "${aws_subnet.public_subnets.*.id}"
+  vpc_zone_identifier  = "${aws_subnet.private_subnets.*.id}"
   enabled_metrics      = ["GroupInServiceInstances"]
 
   lifecycle {
@@ -234,15 +240,25 @@ resource "aws_security_group_rule" "nodes-sg-inbound-http" {
   source_security_group_id = "${aws_security_group.sg_load_balancer.id}"
 }
 
-# resource "aws_security_group_rule" "nodes-sg-outbound" {
-#   type              = "egress"
-#   security_group_id = "${aws_security_group.nodes_sg.id}"
-#   from_port         = -1
-#   to_port           = 0
-#   protocol          = "-1"
+resource "aws_security_group_rule" "nodes-sg-inbound-ssh" {
+  type              = "ingress"
+  security_group_id = "${aws_security_group.nodes_sg.id}"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "TCP"
 
-#   cidr_blocks = ["0.0.0.0/0"]
-# }
+  source_security_group_id = "${aws_security_group.bastion.id}"
+}
+
+resource "aws_security_group_rule" "nodes-sg-outbound" {
+  type              = "egress"
+  security_group_id = "${aws_security_group.nodes_sg.id}"
+  from_port         = -1
+  to_port           = 0
+  protocol          = "-1"
+
+  cidr_blocks = ["0.0.0.0/0"]
+}
 
 resource "aws_autoscaling_policy" "asg_cpu_policy_scale_up" {
   name                   = "asg-cpu-policy-scale-up"
@@ -272,7 +288,6 @@ resource "aws_cloudwatch_metric_alarm" "cpu_alarm_scale_up" {
   alarm_actions   = ["${aws_autoscaling_policy.asg_cpu_policy_scale_up.arn}"]
 }
 
-# scale down alarm
 resource "aws_autoscaling_policy" "asg_cpu_policy_scale_down" {
   name                   = "asg-cpu-policy-scale-down"
   scaling_adjustment     = "-1"
@@ -299,4 +314,83 @@ resource "aws_cloudwatch_metric_alarm" "cpu_alarm_scale_down" {
 
   actions_enabled = true
   alarm_actions   = ["${aws_autoscaling_policy.asg_cpu_policy_scale_down.arn}"]
+}
+
+
+
+resource "aws_instance" "bastion-host" {
+  count                       = "${length(aws_subnet.public_subnets)}"
+  ami                         = "${data.aws_ami.server_ami.id}"
+  instance_type               = "t2.micro"
+  key_name                    = "${var.key_name}"
+  subnet_id                   = "${aws_subnet.public_subnets.*.id[count.index]}"
+  vpc_security_group_ids      = ["${aws_security_group.bastion-sg.id}"]
+  associate_public_ip_address = true
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name    = "Bastion host ${count.index+1}"
+  }
+}
+
+# remember to add ingress for nodes-sg
+resource "aws_security_group" "bastion-sg" {
+  name   = "bastion-security-group"
+  vpc_id = "${aws_vpc.main.id}"
+
+  ingress {
+    protocol    = "tcp"
+    from_port   = 22
+    to_port     = 22
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    protocol    = -1
+    from_port   = 0 
+    to_port     = 0 
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_eip" "eip-nats" {
+  count = "${length(aws_subnet.public_subnets)}"
+  vpc   = true
+
+  tags = {
+    Name = "eip-nat"
+  }
+}
+
+resource "aws_nat_gateway" "nat-gws" {
+  count         = "${length(aws_subnet.public_subnets)}"
+  allocation_id = "${aws_eip.eip-nats.*.id[count.index]}"
+  subnet_id     = "${aws_subnet.public_subnets.*.id[count.index]}"
+
+  tags = {
+    Name        = "nat-gw"
+  }
+}
+
+resource "aws_route_table" "private-rt" {
+  count  = "${length(aws_subnet.private_subnets)}"
+  vpc_id = "${aws_vpc.main.id}"
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = "${aws_nat_gateway.nat-gws.*.id[count.index]}"
+  }
+
+  tags = {
+    Name        = "private-route-table-${count.index + 1}"
+  }
+}
+
+resource "aws_route_table_association" "private-rt" {
+  count          = "${length(aws_subnet.private_subnets)}"
+  subnet_id      = "${aws_subnet.private_subnets.*.id[count.index]}"
+  route_table_id = "${aws_route_table.private-rt.*.id[count.index]}"
 }

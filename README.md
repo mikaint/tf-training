@@ -23,7 +23,9 @@
 - Create Security Group
 - Create ASG policies and alarms
 ## Part 5
-### 
-- Create Key Pair
-- Create Nat Gateways
-- Create Bastion Hosts
+### Fix issues
+- Create NAT Gateways
+- Create Routing Tables
+- Optional tasks
+    - Create Key Pair
+    - Create Bastion Hosts
