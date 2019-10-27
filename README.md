@@ -21,5 +21,4 @@
 - Create Auto-scaling Group
 - Create Launch Configuration
 - Create Security Group
-- Create Key Pair
 - Create ASG policies and alarms
