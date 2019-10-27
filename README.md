@@ -24,8 +24,7 @@
 - Create ASG policies and alarms
 ## Part 5
 ### Fix issues
+- Create Key Pair
+- Create Bastion Hosts
 - Create NAT Gateways
 - Create Routing Tables
-- Optional tasks
-    - Create Key Pair
-    - Create Bastion Hosts

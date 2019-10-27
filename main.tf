@@ -247,7 +247,7 @@ resource "aws_security_group_rule" "nodes-sg-inbound-ssh" {
   to_port           = 22
   protocol          = "TCP"
 
-  source_security_group_id = "${aws_security_group.bastion.id}"
+  source_security_group_id = "${aws_security_group.bastion-sg.id}"
 }
 
 resource "aws_security_group_rule" "nodes-sg-outbound" {
