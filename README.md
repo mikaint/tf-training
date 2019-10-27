@@ -26,5 +26,6 @@
 ### Fix issues
 - Create Key Pair
 - Create Bastion Hosts
+- Create Security Group
 - Create NAT Gateways
 - Create Routing Tables
