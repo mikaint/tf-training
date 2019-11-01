@@ -9,11 +9,7 @@ module "keypair" {
 }
 
 terraform {
-  backend "s3" {
-    bucket = "mystate123"
-    key    = "terraform.tfstate"
-    region = "eu-west-1"
-  }
+  backend "s3" {}
 }
 
 resource "aws_vpc" "main" {

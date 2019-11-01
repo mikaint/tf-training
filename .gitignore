@@ -1,3 +1,4 @@
 .terraform
 keys/
+*.conf
 *.pem
