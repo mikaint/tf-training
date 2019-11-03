@@ -350,6 +350,10 @@ resource "aws_security_group" "bastion-sg" {
     to_port     = 0 
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name        = "bastion-sg"
+  }
 }
 
 resource "aws_eip" "eip-nats" {
