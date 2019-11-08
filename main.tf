@@ -187,6 +187,7 @@ resource "aws_autoscaling_group" "auto_scaling_group" {
   launch_configuration = "${aws_launch_configuration.asg_conf.name}"
   vpc_zone_identifier  = "${aws_subnet.private_subnets.*.id}"
   enabled_metrics      = ["GroupInServiceInstances"]
+  depends_on           = [aws_nat_gateway.nat-gws]
 
   lifecycle {
     create_before_destroy = true
